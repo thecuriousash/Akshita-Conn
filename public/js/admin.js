@@ -120,7 +120,20 @@
       return;
     }
 
-    list.innerHTML = links.map(link => `
+    list.innerHTML = links.map(link => {
+      let scheduleBadge = '';
+      if (link.is_scheduled) {
+        const status = link.schedule_status || 'none';
+        if (status === 'pending') {
+          scheduleBadge = '<span class="schedule-badge pending" title="Scheduled for future">⏰ Scheduled</span>';
+        } else if (status === 'active') {
+          scheduleBadge = '<span class="schedule-badge active" title="Currently active">🟢 Active</span>';
+        } else if (status === 'expired') {
+          scheduleBadge = '<span class="schedule-badge expired" title="Schedule expired">🔴 Expired</span>';
+        }
+      }
+
+      return `
       <div class="admin-link-item ${!link.active ? 'inactive' : ''}" data-id="${link.id}">
         <div class="drag-handle" title="Drag to reorder">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -130,7 +143,7 @@
           </svg>
         </div>
         <div class="admin-link-info">
-          <div class="admin-link-title">${escapeHtml(link.title)}</div>
+          <div class="admin-link-title">${escapeHtml(link.title)} ${scheduleBadge}</div>
           <div class="admin-link-url">${escapeHtml(link.url)}</div>
         </div>
         <div class="admin-link-clicks">
@@ -150,7 +163,7 @@
           </button>
         </div>
       </div>
-    `).join('');
+    `;}).join('');
 
     setupDragAndDrop();
   }
@@ -211,13 +224,53 @@
   // ─── Modal ───
   const modal = document.getElementById('linkModal');
 
+  // Schedule toggle handler
+  document.getElementById('modalEnableSchedule').addEventListener('change', (e) => {
+    const scheduleFields = document.getElementById('scheduleFields');
+    scheduleFields.style.display = e.target.checked ? 'block' : 'none';
+  });
+
+  // Display user timezone
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  document.getElementById('userTimezone').textContent = userTimezone;
+
   function openModal(title = 'Add Link', data = {}) {
     document.getElementById('modalTitle').textContent = title;
     document.getElementById('modalLinkTitle').value = data.title || '';
     document.getElementById('modalLinkUrl').value = data.url || '';
+    
+    // Handle scheduling fields
+    const isScheduled = data.is_scheduled || false;
+    document.getElementById('modalEnableSchedule').checked = isScheduled;
+    document.getElementById('scheduleFields').style.display = isScheduled ? 'block' : 'none';
+    
+    // Convert ISO dates to datetime-local format
+    if (data.scheduled_start) {
+      const startDate = new Date(data.scheduled_start);
+      document.getElementById('modalScheduleStart').value = formatDateTimeLocal(startDate);
+    } else {
+      document.getElementById('modalScheduleStart').value = '';
+    }
+    
+    if (data.scheduled_end) {
+      const endDate = new Date(data.scheduled_end);
+      document.getElementById('modalScheduleEnd').value = formatDateTimeLocal(endDate);
+    } else {
+      document.getElementById('modalScheduleEnd').value = '';
+    }
+    
     currentEditId = data.id || null;
     modal.classList.add('active');
     setTimeout(() => document.getElementById('modalLinkTitle').focus(), 300);
+  }
+
+  function formatDateTimeLocal(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   }
 
   function closeModal() {
@@ -237,17 +290,45 @@
     const url = document.getElementById('modalLinkUrl').value.trim();
     if (!title || !url) { showToast('Please fill in both title and URL', 'error'); return; }
 
+    // Get scheduling data
+    const isScheduled = document.getElementById('modalEnableSchedule').checked;
+    const scheduledStart = document.getElementById('modalScheduleStart').value;
+    const scheduledEnd = document.getElementById('modalScheduleEnd').value;
+
+    // Validate scheduling
+    if (isScheduled && !scheduledStart && !scheduledEnd) {
+      showToast('Please set at least one date when scheduling is enabled', 'error');
+      return;
+    }
+
+    if (isScheduled && scheduledStart && scheduledEnd) {
+      const start = new Date(scheduledStart);
+      const end = new Date(scheduledEnd);
+      if (end <= start) {
+        showToast('End date must be after start date', 'error');
+        return;
+      }
+    }
+
+    const linkData = {
+      title,
+      url,
+      is_scheduled: isScheduled,
+      scheduled_start: scheduledStart || null,
+      scheduled_end: scheduledEnd || null
+    };
+
     try {
       if (currentEditId) {
         await fetch(`/api/links/${currentEditId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, url })
+          body: JSON.stringify(linkData)
         });
         showToast('Link updated!');
       } else {
         await fetch('/api/links', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, url })
+          body: JSON.stringify(linkData)
         });
         showToast('Link added!');
       }

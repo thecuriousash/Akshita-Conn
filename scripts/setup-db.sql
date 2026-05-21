@@ -38,6 +38,9 @@ CREATE TABLE IF NOT EXISTS user_links (
   active BOOLEAN DEFAULT true,
   display_order INTEGER DEFAULT 0,
   style TEXT DEFAULT 'default',
+  scheduled_start TIMESTAMPTZ NULL,
+  scheduled_end TIMESTAMPTZ NULL,
+  is_scheduled BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -87,6 +90,15 @@ CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_settings_user_id ON user_settings(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
 CREATE INDEX IF NOT EXISTS idx_orders_razorpay_order_id ON orders(razorpay_order_id);
+
+-- Indexes for link scheduling
+CREATE INDEX IF NOT EXISTS idx_scheduled_links 
+ON user_links(is_scheduled, scheduled_start, scheduled_end) 
+WHERE is_scheduled = TRUE;
+
+CREATE INDEX IF NOT EXISTS idx_active_scheduled_links 
+ON user_links(user_id, is_scheduled, active) 
+WHERE is_scheduled = TRUE;
 
 -- 8. Enable Row Level Security (optional, supabase best practice)
 -- We use service_role key on backend, so RLS doesn't block us,

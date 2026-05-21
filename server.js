@@ -159,6 +159,65 @@ async function initUserData(userId, userName) {
   }
 }
 
+// ─── Link Scheduling Processor ───
+
+async function processScheduledLinks() {
+  try {
+    const now = new Date().toISOString();
+
+    // Get all scheduled links
+    const { data: scheduledLinks, error } = await supabase
+      .from('user_links')
+      .select('*')
+      .eq('is_scheduled', true);
+
+    if (error) {
+      console.error('Error fetching scheduled links:', error);
+      return;
+    }
+
+    if (!scheduledLinks || scheduledLinks.length === 0) return;
+
+    for (const link of scheduledLinks) {
+      const startDate = link.scheduled_start ? new Date(link.scheduled_start) : null;
+      const endDate = link.scheduled_end ? new Date(link.scheduled_end) : null;
+      const nowDate = new Date(now);
+
+      let shouldBeActive = link.active;
+
+      // Determine if link should be active based on schedule
+      if (startDate && endDate) {
+        // Both start and end dates set
+        shouldBeActive = nowDate >= startDate && nowDate <= endDate;
+      } else if (startDate && !endDate) {
+        // Only start date set
+        shouldBeActive = nowDate >= startDate;
+      } else if (!startDate && endDate) {
+        // Only end date set
+        shouldBeActive = nowDate <= endDate;
+      }
+
+      // Update link if status needs to change
+      if (link.active !== shouldBeActive) {
+        await supabase
+          .from('user_links')
+          .update({ active: shouldBeActive })
+          .eq('id', link.id);
+        
+        console.log(`Link "${link.title}" (${link.id}) ${shouldBeActive ? 'activated' : 'deactivated'} by schedule`);
+      }
+    }
+  } catch (err) {
+    console.error('Error processing scheduled links:', err);
+  }
+}
+
+// Run scheduler every minute
+setInterval(processScheduledLinks, 60 * 1000);
+
+// Run once on startup
+processScheduledLinks();
+
 // ──────────────────── PAGE ROUTES ────────────────────
 
 // Page routes must be defined BEFORE express.static
@@ -423,17 +482,39 @@ app.get('/api/links', requireAuth, async (req, res) => {
     .eq('user_id', req.auth.userId)
     .order('display_order', { ascending: true });
 
-  // Map to client-expected format
-  const mapped = (links || []).map(l => ({
-    id: l.id,
-    title: l.title,
-    url: l.url,
-    icon: l.icon,
-    clicks: l.clicks,
-    active: l.active,
-    order: l.display_order,
-    style: l.style
-  }));
+  // Map to client-expected format with scheduling info
+  const mapped = (links || []).map(l => {
+    const now = new Date();
+    let scheduleStatus = 'none';
+    
+    if (l.is_scheduled) {
+      const startDate = l.scheduled_start ? new Date(l.scheduled_start) : null;
+      const endDate = l.scheduled_end ? new Date(l.scheduled_end) : null;
+      
+      if (startDate && now < startDate) {
+        scheduleStatus = 'pending'; // Not started yet
+      } else if (endDate && now > endDate) {
+        scheduleStatus = 'expired'; // Past end date
+      } else {
+        scheduleStatus = 'active'; // Currently within schedule
+      }
+    }
+
+    return {
+      id: l.id,
+      title: l.title,
+      url: l.url,
+      icon: l.icon,
+      clicks: l.clicks,
+      active: l.active,
+      order: l.display_order,
+      style: l.style,
+      is_scheduled: l.is_scheduled || false,
+      scheduled_start: l.scheduled_start,
+      scheduled_end: l.scheduled_end,
+      schedule_status: scheduleStatus
+    };
+  });
 
   res.json(mapped);
 });
@@ -443,6 +524,15 @@ app.post('/api/links', requireAuth, async (req, res) => {
     .from('user_links')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', req.auth.userId);
+
+  // Validate scheduling dates
+  const scheduledStart = req.body.scheduled_start ? new Date(req.body.scheduled_start) : null;
+  const scheduledEnd = req.body.scheduled_end ? new Date(req.body.scheduled_end) : null;
+  const isScheduled = req.body.is_scheduled || false;
+
+  if (isScheduled && scheduledStart && scheduledEnd && scheduledEnd <= scheduledStart) {
+    return res.status(400).json({ error: 'End date must be after start date.' });
+  }
 
   const newLinkId = uuidv4();
   const { error } = await supabase.from('user_links').insert({
@@ -454,7 +544,10 @@ app.post('/api/links', requireAuth, async (req, res) => {
     clicks: 0,
     active: true,
     display_order: count || 0,
-    style: req.body.style || 'default'
+    style: req.body.style || 'default',
+    is_scheduled: isScheduled,
+    scheduled_start: scheduledStart ? scheduledStart.toISOString() : null,
+    scheduled_end: scheduledEnd ? scheduledEnd.toISOString() : null
   });
 
   if (error) {
@@ -470,7 +563,10 @@ app.post('/api/links', requireAuth, async (req, res) => {
     clicks: 0,
     active: true,
     order: count || 0,
-    style: req.body.style || 'default'
+    style: req.body.style || 'default',
+    is_scheduled: isScheduled,
+    scheduled_start: scheduledStart ? scheduledStart.toISOString() : null,
+    scheduled_end: scheduledEnd ? scheduledEnd.toISOString() : null
   });
 });
 
@@ -491,6 +587,22 @@ app.put('/api/links/:id', requireAuth, async (req, res) => {
   if (req.body.active !== undefined) updates.active = req.body.active;
   if (req.body.order !== undefined) updates.display_order = req.body.order;
   if (req.body.style !== undefined) updates.style = req.body.style;
+
+  // Handle scheduling updates
+  if (req.body.is_scheduled !== undefined) updates.is_scheduled = req.body.is_scheduled;
+  if (req.body.scheduled_start !== undefined) {
+    updates.scheduled_start = req.body.scheduled_start ? new Date(req.body.scheduled_start).toISOString() : null;
+  }
+  if (req.body.scheduled_end !== undefined) {
+    updates.scheduled_end = req.body.scheduled_end ? new Date(req.body.scheduled_end).toISOString() : null;
+  }
+
+  // Validate scheduling dates
+  const startDate = updates.scheduled_start || existing.scheduled_start;
+  const endDate = updates.scheduled_end || existing.scheduled_end;
+  if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
+    return res.status(400).json({ error: 'End date must be after start date.' });
+  }
 
   await supabase.from('user_links')
     .update(updates)
@@ -703,14 +815,34 @@ app.get('/api/u/:username/links', async (req, res) => {
 
   const { data: links } = await supabase
     .from('user_links')
-    .select('id, title, url, icon, style, display_order')
+    .select('id, title, url, icon, style, display_order, is_scheduled, scheduled_start, scheduled_end')
     .eq('user_id', user.id)
     .eq('active', true)
     .order('display_order', { ascending: true });
 
-  const publicLinks = (links || []).map(l => ({
-    id: l.id, title: l.title, url: l.url, icon: l.icon, style: l.style, order: l.display_order
-  }));
+  // Filter out scheduled links that are not currently active
+  const now = new Date();
+  const publicLinks = (links || [])
+    .filter(l => {
+      if (!l.is_scheduled) return true;
+      
+      const startDate = l.scheduled_start ? new Date(l.scheduled_start) : null;
+      const endDate = l.scheduled_end ? new Date(l.scheduled_end) : null;
+      
+      // Check if link is within its scheduled time window
+      if (startDate && now < startDate) return false; // Not started yet
+      if (endDate && now > endDate) return false; // Already expired
+      
+      return true;
+    })
+    .map(l => ({
+      id: l.id, 
+      title: l.title, 
+      url: l.url, 
+      icon: l.icon, 
+      style: l.style, 
+      order: l.display_order
+    }));
 
   res.json(publicLinks);
 });
