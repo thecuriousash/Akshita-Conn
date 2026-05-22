@@ -8,58 +8,57 @@
   let currentEditId = null;
   let selectedTheme = 'midnight';
 
-  // ═══════════ BULK SELECTION MANAGER ═══════════
+  // ═══════════ BULK SELECTION MANAGER (OPTIMIZED) ═══════════
   class BulkSelectionManager {
     constructor() {
-      this.selectedIds = new Set(); // O(1) lookup performance
-      this.lastSelectedIndex = null; // For Shift+Click range selection
+      this.selectedIds = new Set(); // O(1) lookup
+      this.lastSelectedIndex = null;
       this.toolbar = document.getElementById('bulkToolbar');
       this.countDisplay = document.getElementById('bulkCount');
       this.selectAllCheckbox = document.getElementById('selectAllCheckbox');
+      this.updateScheduled = false; // Debounce flag
     }
 
     selectLink(id, index = null) {
       this.selectedIds.add(id);
       if (index !== null) this.lastSelectedIndex = index;
-      this.updateUI();
+      this.scheduleUpdate();
     }
 
     deselectLink(id) {
       this.selectedIds.delete(id);
-      this.updateUI();
+      this.scheduleUpdate();
     }
 
     toggleLink(id, index = null) {
       if (this.selectedIds.has(id)) {
-        this.deselectLink(id);
+        this.selectedIds.delete(id);
       } else {
-        this.selectLink(id, index);
+        this.selectedIds.add(id);
+        if (index !== null) this.lastSelectedIndex = index;
       }
+      this.scheduleUpdate();
     }
 
-    // Range selection with Shift+Click
     selectRange(startIndex, endIndex) {
-      const checkboxes = Array.from(document.querySelectorAll('.link-checkbox'));
-      const start = Math.min(startIndex, endIndex);
-      const end = Math.max(startIndex, endIndex);
+      const checkboxes = document.querySelectorAll('.link-checkbox');
+      const [start, end] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
       
       for (let i = start; i <= end; i++) {
-        if (checkboxes[i]) {
-          this.selectedIds.add(checkboxes[i].dataset.linkId);
-        }
+        if (checkboxes[i]) this.selectedIds.add(checkboxes[i].dataset.linkId);
       }
-      this.updateUI();
+      this.scheduleUpdate();
     }
 
     selectAll(linkIds) {
       linkIds.forEach(id => this.selectedIds.add(id));
-      this.updateUI();
+      this.scheduleUpdate();
     }
 
     clearSelection() {
       this.selectedIds.clear();
       this.lastSelectedIndex = null;
-      this.updateUI();
+      this.scheduleUpdate();
     }
 
     getSelectedCount() {
@@ -74,44 +73,48 @@
       return this.selectedIds.size > 0;
     }
 
-    updateUI() {
-      const count = this.getSelectedCount();
-      
-      // Update toolbar visibility with animation
-      if (count > 0) {
-        this.toolbar.classList.add('visible');
-        this.countDisplay.textContent = `${count} selected`;
-      } else {
-        this.toolbar.classList.remove('visible');
-      }
+    // Debounced update - prevents excessive re-renders
+    scheduleUpdate() {
+      if (this.updateScheduled) return;
+      this.updateScheduled = true;
+      requestAnimationFrame(() => {
+        this.updateUI();
+        this.updateScheduled = false;
+      });
+    }
 
-      // Update checkboxes in DOM
-      document.querySelectorAll('.link-checkbox').forEach(checkbox => {
+    // Optimized UI update - only touches changed elements
+    updateUI() {
+      const count = this.selectedIds.size;
+      
+      // Update toolbar
+      this.toolbar.classList.toggle('visible', count > 0);
+      if (count > 0) this.countDisplay.textContent = `${count} selected`;
+
+      // Batch DOM updates
+      const checkboxes = document.querySelectorAll('.link-checkbox');
+      checkboxes.forEach(checkbox => {
         const linkId = checkbox.dataset.linkId;
-        checkbox.checked = this.selectedIds.has(linkId);
+        const isSelected = this.selectedIds.has(linkId);
         
-        // Update parent link item visual state with animation
-        const linkItem = checkbox.closest('.admin-link-item');
-        if (linkItem) {
-          if (this.selectedIds.has(linkId)) {
-            linkItem.classList.add('selected');
-            // Add scale animation
-            linkItem.style.animation = 'selectPulse 0.3s ease-out';
-            setTimeout(() => linkItem.style.animation = '', 300);
-          } else {
-            linkItem.classList.remove('selected');
+        // Only update if state changed
+        if (checkbox.checked !== isSelected) {
+          checkbox.checked = isSelected;
+          const linkItem = checkbox.closest('.admin-link-item');
+          if (linkItem) {
+            linkItem.classList.toggle('selected', isSelected);
+            if (isSelected) {
+              linkItem.style.animation = 'selectPulse 0.3s ease-out';
+              setTimeout(() => linkItem.style.animation = '', 300);
+            }
           }
         }
       });
 
       // Update select all checkbox
-      const allCheckboxes = document.querySelectorAll('.link-checkbox');
-      if (allCheckboxes.length > 0) {
-        this.selectAllCheckbox.checked = count === allCheckboxes.length;
-        this.selectAllCheckbox.indeterminate = count > 0 && count < allCheckboxes.length;
-      } else {
-        this.selectAllCheckbox.checked = false;
-        this.selectAllCheckbox.indeterminate = false;
+      if (checkboxes.length > 0) {
+        this.selectAllCheckbox.checked = count === checkboxes.length;
+        this.selectAllCheckbox.indeterminate = count > 0 && count < checkboxes.length;
       }
     }
 
@@ -436,40 +439,24 @@
     }, { offset: Number.NEGATIVE_INFINITY }).element;
   }
 
-  // ═══════════ BULK SELECTION LISTENERS ═══════════
+  // ═══════════ BULK SELECTION LISTENERS (OPTIMIZED) ═══════════
   function setupBulkSelectionListeners() {
-    // Individual checkbox listeners with Shift+Click and Ctrl+Click support
-    document.querySelectorAll('.link-checkbox').forEach((checkbox, index) => {
-      checkbox.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const linkId = checkbox.dataset.linkId;
-        
-        // Shift+Click: Range selection
-        if (e.shiftKey && bulkSelection.lastSelectedIndex !== null) {
-          e.preventDefault();
-          bulkSelection.selectRange(bulkSelection.lastSelectedIndex, index);
-        }
-        // Ctrl/Cmd+Click: Multi-toggle (already handled by checkbox, just track index)
-        else if (e.ctrlKey || e.metaKey) {
-          bulkSelection.toggleLink(linkId, index);
-        }
-        // Regular click
-        else {
-          bulkSelection.toggleLink(linkId, index);
-        }
-      });
+    const linksList = document.getElementById('adminLinksList');
+    
+    // Event delegation for better performance
+    linksList.addEventListener('click', (e) => {
+      const checkbox = e.target.closest('.link-checkbox');
+      if (!checkbox) return;
 
-      // Also handle the parent link item click for better UX
-      const linkItem = checkbox.closest('.admin-link-item');
-      if (linkItem) {
-        linkItem.addEventListener('click', (e) => {
-          // Only trigger if clicking on the item itself, not buttons/toggles
-          if (e.target === linkItem || e.target.closest('.admin-link-info') || e.target.closest('.link-checkbox-wrapper')) {
-            if (!e.target.closest('.admin-link-actions') && !e.target.closest('.toggle-switch') && !e.target.closest('.drag-handle')) {
-              checkbox.click();
-            }
-          }
-        });
+      e.stopPropagation();
+      const linkId = checkbox.dataset.linkId;
+      const index = Array.from(document.querySelectorAll('.link-checkbox')).indexOf(checkbox);
+      
+      if (e.shiftKey && bulkSelection.lastSelectedIndex !== null) {
+        e.preventDefault();
+        bulkSelection.selectRange(bulkSelection.lastSelectedIndex, index);
+      } else {
+        bulkSelection.toggleLink(linkId, index);
       }
     });
   }
@@ -506,54 +493,44 @@
     });
   }
 
-  // ═══════════ MOBILE TOUCH SUPPORT ═══════════
+  // ═══════════ MOBILE TOUCH SUPPORT (OPTIMIZED) ═══════════
   function setupMobileTouchSupport() {
+    const linksList = document.getElementById('adminLinksList');
     let touchTimer = null;
     let touchStarted = false;
 
-    document.querySelectorAll('.admin-link-item').forEach((linkItem, index) => {
+    // Event delegation for touch events
+    linksList.addEventListener('touchstart', (e) => {
+      const linkItem = e.target.closest('.admin-link-item');
+      if (!linkItem || e.target.closest('.admin-link-actions, .toggle-switch')) return;
+
       const checkbox = linkItem.querySelector('.link-checkbox');
       if (!checkbox) return;
 
-      // Long-press to select (300ms)
-      linkItem.addEventListener('touchstart', (e) => {
-        // Don't interfere with buttons/toggles
-        if (e.target.closest('.admin-link-actions') || e.target.closest('.toggle-switch')) return;
-
-        touchStarted = true;
-        touchTimer = setTimeout(() => {
-          if (touchStarted) {
-            // Haptic feedback if supported
-            if (navigator.vibrate) {
-              navigator.vibrate(50);
-            }
-            
-            const linkId = checkbox.dataset.linkId;
-            bulkSelection.toggleLink(linkId, index);
-            
-            // Visual feedback
-            linkItem.style.transform = 'scale(0.98)';
-            setTimeout(() => linkItem.style.transform = '', 100);
-          }
-        }, 300);
-      });
-
-      linkItem.addEventListener('touchend', () => {
-        touchStarted = false;
-        if (touchTimer) {
-          clearTimeout(touchTimer);
-          touchTimer = null;
+      touchStarted = true;
+      touchTimer = setTimeout(() => {
+        if (touchStarted) {
+          if (navigator.vibrate) navigator.vibrate(50);
+          
+          const linkId = checkbox.dataset.linkId;
+          const index = Array.from(document.querySelectorAll('.link-checkbox')).indexOf(checkbox);
+          bulkSelection.toggleLink(linkId, index);
+          
+          linkItem.style.transform = 'scale(0.98)';
+          setTimeout(() => linkItem.style.transform = '', 100);
         }
-      });
+      }, 300);
+    }, { passive: true });
 
-      linkItem.addEventListener('touchmove', () => {
-        touchStarted = false;
-        if (touchTimer) {
-          clearTimeout(touchTimer);
-          touchTimer = null;
-        }
-      });
-    });
+    linksList.addEventListener('touchend', () => {
+      touchStarted = false;
+      if (touchTimer) clearTimeout(touchTimer);
+    }, { passive: true });
+
+    linksList.addEventListener('touchmove', () => {
+      touchStarted = false;
+      if (touchTimer) clearTimeout(touchTimer);
+    }, { passive: true });
   }
 
   // Select All checkbox
