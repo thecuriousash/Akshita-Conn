@@ -1095,3 +1095,397 @@ textarea.form-input {
   color: var(--text-secondary);
   margin-right: 12px;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   BULK OPERATIONS STYLES
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── Select All Checkbox ─── */
+.select-all-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+  user-select: none;
+}
+
+.select-all-checkbox:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.select-all-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* ─── Link Checkbox ─── */
+.link-checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  margin-right: 4px;
+}
+
+.link-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.link-checkbox:hover {
+  transform: scale(1.1);
+}
+
+/* ─── Selected Link State ─── */
+.admin-link-item.selected {
+  background: rgba(168, 85, 247, 0.12);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.2);
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.admin-link-item.selected .admin-link-title {
+  color: var(--accent-light);
+}
+
+/* Selection pulse animation */
+@keyframes selectPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Link item hover effect when in selection mode */
+.admin-link-item:has(.link-checkbox:hover) {
+  cursor: pointer;
+  background: var(--bg-card-hover);
+}
+
+.admin-link-item.selected:hover {
+  background: rgba(168, 85, 247, 0.18);
+  border-color: var(--accent-light);
+}
+
+/* ─── Floating Bulk Toolbar ─── */
+.bulk-toolbar {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(120px);
+  z-index: 500;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: none;
+}
+
+.bulk-toolbar.visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: all;
+}
+
+.bulk-toolbar-content {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  background: rgba(10, 10, 10, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5),
+              0 0 0 1px rgba(168, 85, 247, 0.1),
+              inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: toolbarSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes toolbarSlideUp {
+  from {
+    transform: translateY(20px) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+.bulk-toolbar-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 16px;
+  border-right: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.bulk-count {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--accent-light);
+  white-space: nowrap;
+}
+
+.bulk-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bulk-toolbar .btn {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.bulk-toolbar .btn:hover {
+  transform: translateY(-2px);
+}
+
+.bulk-toolbar .btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.bulk-toolbar .btn-icon {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Loading state for bulk toolbar */
+.bulk-toolbar.loading {
+  pointer-events: none;
+}
+
+.bulk-toolbar.loading .bulk-toolbar-content {
+  opacity: 0.6;
+  position: relative;
+}
+
+.bulk-toolbar.loading .bulk-toolbar-content::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Keyboard shortcut hints */
+.bulk-toolbar-hint {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 10, 0.95);
+  backdrop-filter: blur(10px);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.bulk-toolbar:hover .bulk-toolbar-hint {
+  opacity: 1;
+}
+
+.bulk-toolbar-hint kbd {
+  background: rgba(168, 85, 247, 0.2);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: var(--accent-light);
+}
+
+/* Smooth transitions for all interactive elements */
+.link-checkbox,
+.admin-link-item,
+.bulk-toolbar,
+.modal-overlay {
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Enhanced checkbox animation */
+.link-checkbox {
+  transition: transform 0.2s ease;
+}
+
+.link-checkbox:checked {
+  transform: scale(1.1);
+}
+
+.link-checkbox:active {
+  transform: scale(0.95);
+}
+
+/* ─── Custom Confirmation Modal ─── */
+.confirm-modal {
+  max-width: 420px;
+}
+
+.confirm-body {
+  padding: 8px 0;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.confirm-body p {
+  margin: 0;
+}
+
+/* Enhanced modal animations */
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modalSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+}
+
+/* Confirmation button focus states */
+.confirm-modal .btn:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.confirm-modal .btn-danger:focus {
+  outline-color: #ef4444;
+}
+
+/* ─── Responsive Bulk Toolbar ─── */
+@media (max-width: 768px) {
+  .bulk-toolbar {
+    left: 16px;
+    right: 16px;
+    transform: translateX(0) translateY(120px);
+    bottom: 16px;
+  }
+
+  .bulk-toolbar.visible {
+    transform: translateX(0) translateY(0);
+  }
+
+  .bulk-toolbar-content {
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .bulk-toolbar-info {
+    padding-right: 0;
+    padding-bottom: 12px;
+    border-right: none;
+    border-bottom: 1px solid rgba(168, 85, 247, 0.2);
+    width: 100%;
+    justify-content: center;
+  }
+
+  .bulk-toolbar-actions {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .bulk-toolbar .btn {
+    flex: 1;
+    min-width: 100px;
+    justify-content: center;
+  }
+
+  .select-all-checkbox {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+
+  .select-all-checkbox span {
+    display: none;
+  }
+
+  /* Hide keyboard hints on mobile */
+  .bulk-toolbar-hint {
+    display: none;
+  }
+
+  /* Enhanced touch targets for mobile */
+  .link-checkbox {
+    width: 24px;
+    height: 24px;
+  }
+
+  .link-checkbox-wrapper {
+    padding: 8px;
+    margin-right: 0;
+  }
+
+  /* Mobile long-press visual feedback */
+  .admin-link-item {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  .admin-link-item:active {
+    background: var(--bg-card-hover);
+  }
+}
+
+@media (max-width: 480px) {
+  .bulk-toolbar .btn span {
+    display: none;
+  }
+
+  .bulk-toolbar .btn {
+    min-width: auto;
+    padding: 8px 10px;
+  }
+
+  .bulk-toolbar-actions {
+    gap: 6px;
+  }
+}

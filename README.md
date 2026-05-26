@@ -130,7 +130,7 @@ Create a `.env` file in the root directory:
 
 **Linux / macOS:**
 ```bash
-cp .env.example .env # If available, otherwise create manually
+cp .env.example .env 
 nano .env
 ```
 
@@ -139,6 +139,8 @@ nano .env
 New-Item -ItemType File -Name ".env"
 notepad .env
 ```
+
+> ⚠️ **IMPORTANT:** `JWT_SECRET` is **required**. The server will exit immediately if it's missing.
 
 Add the following to your `.env` file:
 ```env
@@ -321,7 +323,9 @@ Verify that:
 - Database tables were created successfully
 
 ### JWT errors
-Ensure `JWT_SECRET` is properly added in the `.env` file.
+- Ensure `JWT_SECRET` is properly added in the `.env` file
+- The server will exit at startup with a clear error if `JWT_SECRET` is missing
+- Generate a secure secret: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 ---
 
 ## 🤝 Contributing

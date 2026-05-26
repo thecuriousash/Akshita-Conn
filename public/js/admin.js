@@ -8,6 +8,217 @@
   let currentEditId = null;
   let selectedTheme = 'midnight';
 
+  // ═══════════ BULK SELECTION MANAGER (OPTIMIZED) ═══════════
+  class BulkSelectionManager {
+    constructor() {
+      this.selectedIds = new Set(); // O(1) lookup
+      this.lastSelectedIndex = null;
+      this.toolbar = document.getElementById('bulkToolbar');
+      this.countDisplay = document.getElementById('bulkCount');
+      this.selectAllCheckbox = document.getElementById('selectAllCheckbox');
+      this.updateScheduled = false; // Debounce flag
+    }
+
+    selectLink(id, index = null) {
+      this.selectedIds.add(id);
+      if (index !== null) this.lastSelectedIndex = index;
+      this.scheduleUpdate();
+    }
+
+    deselectLink(id) {
+      this.selectedIds.delete(id);
+      this.scheduleUpdate();
+    }
+
+    toggleLink(id, index = null) {
+      if (this.selectedIds.has(id)) {
+        this.selectedIds.delete(id);
+      } else {
+        this.selectedIds.add(id);
+        if (index !== null) this.lastSelectedIndex = index;
+      }
+      this.scheduleUpdate();
+    }
+
+    selectRange(startIndex, endIndex) {
+      const checkboxes = document.querySelectorAll('.link-checkbox');
+      const [start, end] = [Math.min(startIndex, endIndex), Math.max(startIndex, endIndex)];
+      
+      for (let i = start; i <= end; i++) {
+        if (checkboxes[i]) this.selectedIds.add(checkboxes[i].dataset.linkId);
+      }
+      this.scheduleUpdate();
+    }
+
+    selectAll(linkIds) {
+      linkIds.forEach(id => this.selectedIds.add(id));
+      this.scheduleUpdate();
+    }
+
+    clearSelection() {
+      this.selectedIds.clear();
+      this.lastSelectedIndex = null;
+      this.scheduleUpdate();
+    }
+
+    getSelectedCount() {
+      return this.selectedIds.size;
+    }
+
+    getSelectedIds() {
+      return Array.from(this.selectedIds);
+    }
+
+    hasSelection() {
+      return this.selectedIds.size > 0;
+    }
+
+    // Debounced update - prevents excessive re-renders
+    scheduleUpdate() {
+      if (this.updateScheduled) return;
+      this.updateScheduled = true;
+      requestAnimationFrame(() => {
+        this.updateUI();
+        this.updateScheduled = false;
+      });
+    }
+
+    // Optimized UI update - only touches changed elements
+    updateUI() {
+      const count = this.selectedIds.size;
+      
+      // Update toolbar
+      this.toolbar.classList.toggle('visible', count > 0);
+      if (count > 0) this.countDisplay.textContent = `${count} selected`;
+
+      // Batch DOM updates
+      const checkboxes = document.querySelectorAll('.link-checkbox');
+      checkboxes.forEach(checkbox => {
+        const linkId = checkbox.dataset.linkId;
+        const isSelected = this.selectedIds.has(linkId);
+        
+        // Only update if state changed
+        if (checkbox.checked !== isSelected) {
+          checkbox.checked = isSelected;
+          const linkItem = checkbox.closest('.admin-link-item');
+          if (linkItem) {
+            linkItem.classList.toggle('selected', isSelected);
+            if (isSelected) {
+              linkItem.style.animation = 'selectPulse 0.3s ease-out';
+              setTimeout(() => linkItem.style.animation = '', 300);
+            }
+          }
+        }
+      });
+
+      // Update select all checkbox
+      if (checkboxes.length > 0) {
+        this.selectAllCheckbox.checked = count === checkboxes.length;
+        this.selectAllCheckbox.indeterminate = count > 0 && count < checkboxes.length;
+      }
+    }
+
+    setLoading(isLoading) {
+      this.toolbar.classList.toggle('loading', isLoading);
+    }
+  }
+
+  // ═══════════ BULK ACTIONS HANDLER ═══════════
+  class BulkActionsHandler {
+    constructor(selectionManager) {
+      this.selectionManager = selectionManager;
+    }
+
+    async bulkEnable() {
+      const ids = this.selectionManager.getSelectedIds();
+      if (ids.length === 0) return;
+
+      this.selectionManager.setLoading(true);
+      
+      try {
+        const response = await fetch('/api/links/bulk-update', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ linkIds: ids, active: true })
+        });
+
+        if (!response.ok) throw new Error('Failed to enable links');
+
+        showToast(`${ids.length} link${ids.length > 1 ? 's' : ''} enabled`);
+        this.selectionManager.clearSelection();
+        await loadLinks();
+        reloadPreview();
+      } catch (err) {
+        showToast('Failed to enable links', 'error');
+      } finally {
+        this.selectionManager.setLoading(false);
+      }
+    }
+
+    async bulkDisable() {
+      const ids = this.selectionManager.getSelectedIds();
+      if (ids.length === 0) return;
+
+      this.selectionManager.setLoading(true);
+      
+      try {
+        const response = await fetch('/api/links/bulk-update', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ linkIds: ids, active: false })
+        });
+
+        if (!response.ok) throw new Error('Failed to disable links');
+
+        showToast(`${ids.length} link${ids.length > 1 ? 's' : ''} disabled`);
+        this.selectionManager.clearSelection();
+        await loadLinks();
+        reloadPreview();
+      } catch (err) {
+        showToast('Failed to disable links', 'error');
+      } finally {
+        this.selectionManager.setLoading(false);
+      }
+    }
+
+    async bulkDelete() {
+      const ids = this.selectionManager.getSelectedIds();
+      if (ids.length === 0) return;
+
+      const confirmed = await showConfirmModal(
+        'Delete Links',
+        `Are you sure you want to delete ${ids.length} link${ids.length > 1 ? 's' : ''}? This action cannot be undone.`
+      );
+
+      if (!confirmed) return;
+
+      this.selectionManager.setLoading(true);
+      
+      try {
+        const response = await fetch('/api/links/bulk-delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ linkIds: ids })
+        });
+
+        if (!response.ok) throw new Error('Failed to delete links');
+
+        showToast(`${ids.length} link${ids.length > 1 ? 's' : ''} deleted`);
+        this.selectionManager.clearSelection();
+        await loadLinks();
+        reloadPreview();
+      } catch (err) {
+        showToast('Failed to delete links', 'error');
+      } finally {
+        this.selectionManager.setLoading(false);
+      }
+    }
+  }
+
+  // Initialize bulk operations
+  const bulkSelection = new BulkSelectionManager();
+  const bulkActions = new BulkActionsHandler(bulkSelection);
+
   // ─── Theme Definitions ───
   const THEMES = [
     { id: 'midnight',       name: 'Midnight',        tag: 'Default',  bg: 'linear-gradient(135deg, #0a0a0a, #1a0a2e, #0a0a0a)',   colors: ['#a855f7','#c084fc','#f5f5f5'] },
@@ -117,6 +328,7 @@
           <h3>No links yet</h3>
           <p>Click "Add Link" to create your first link.</p>
         </div>`;
+      bulkSelection.clearSelection();
       return;
     }
 
@@ -135,6 +347,9 @@
 
       return `
       <div class="admin-link-item ${!link.active ? 'inactive' : ''}" data-id="${link.id}">
+        <div class="link-checkbox-wrapper">
+          <input type="checkbox" class="link-checkbox" data-link-id="${link.id}">
+        </div>
         <div class="drag-handle" title="Drag to reorder">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="9" cy="5" r="1"/><circle cx="15" cy="5" r="1"/>
@@ -166,6 +381,9 @@
     `;}).join('');
 
     setupDragAndDrop();
+    setupBulkSelectionListeners();
+    setupMobileTouchSupport();
+    bulkSelection.updateUI();
   }
 
   // ─── Drag & Drop ───
@@ -219,6 +437,197 @@
       if (offset < 0 && offset > closest.offset) return { offset, element: child };
       return closest;
     }, { offset: Number.NEGATIVE_INFINITY }).element;
+  }
+
+  // ═══════════ BULK SELECTION LISTENERS (OPTIMIZED) ═══════════
+  function setupBulkSelectionListeners() {
+    const linksList = document.getElementById('adminLinksList');
+    
+    // Event delegation for better performance
+    linksList.addEventListener('click', (e) => {
+      const checkbox = e.target.closest('.link-checkbox');
+      if (!checkbox) return;
+
+      e.stopPropagation();
+      const linkId = checkbox.dataset.linkId;
+      const index = Array.from(document.querySelectorAll('.link-checkbox')).indexOf(checkbox);
+      
+      if (e.shiftKey && bulkSelection.lastSelectedIndex !== null) {
+        e.preventDefault();
+        bulkSelection.selectRange(bulkSelection.lastSelectedIndex, index);
+      } else {
+        bulkSelection.toggleLink(linkId, index);
+      }
+    });
+  }
+
+  // ═══════════ KEYBOARD SHORTCUTS ═══════════
+  function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+      // Ignore if typing in input fields
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      // Ctrl/Cmd+A: Select all links
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        const allLinkIds = [...document.querySelectorAll('.link-checkbox')].map(cb => cb.dataset.linkId);
+        if (allLinkIds.length > 0) {
+          bulkSelection.selectAll(allLinkIds);
+          showToast('All links selected');
+        }
+      }
+
+      // Escape: Clear selection
+      if (e.key === 'Escape') {
+        if (bulkSelection.hasSelection()) {
+          bulkSelection.clearSelection();
+          showToast('Selection cleared');
+        }
+      }
+
+      // Delete: Bulk delete selected
+      if (e.key === 'Delete' && bulkSelection.hasSelection()) {
+        e.preventDefault();
+        bulkActions.bulkDelete();
+      }
+    });
+  }
+
+  // ═══════════ MOBILE TOUCH SUPPORT (OPTIMIZED) ═══════════
+  function setupMobileTouchSupport() {
+    const linksList = document.getElementById('adminLinksList');
+    let touchTimer = null;
+    let touchStarted = false;
+
+    // Event delegation for touch events
+    linksList.addEventListener('touchstart', (e) => {
+      const linkItem = e.target.closest('.admin-link-item');
+      if (!linkItem || e.target.closest('.admin-link-actions, .toggle-switch')) return;
+
+      const checkbox = linkItem.querySelector('.link-checkbox');
+      if (!checkbox) return;
+
+      touchStarted = true;
+      touchTimer = setTimeout(() => {
+        if (touchStarted) {
+          if (navigator.vibrate) navigator.vibrate(50);
+          
+          const linkId = checkbox.dataset.linkId;
+          const index = Array.from(document.querySelectorAll('.link-checkbox')).indexOf(checkbox);
+          bulkSelection.toggleLink(linkId, index);
+          
+          linkItem.style.transform = 'scale(0.98)';
+          setTimeout(() => linkItem.style.transform = '', 100);
+        }
+      }, 300);
+    }, { passive: true });
+
+    linksList.addEventListener('touchend', () => {
+      touchStarted = false;
+      if (touchTimer) clearTimeout(touchTimer);
+    }, { passive: true });
+
+    linksList.addEventListener('touchmove', () => {
+      touchStarted = false;
+      if (touchTimer) clearTimeout(touchTimer);
+    }, { passive: true });
+  }
+
+  // Select All checkbox
+  document.getElementById('selectAllCheckbox')?.addEventListener('change', (e) => {
+    if (e.target.checked) {
+      const allLinkIds = [...document.querySelectorAll('.link-checkbox')].map(cb => cb.dataset.linkId);
+      bulkSelection.selectAll(allLinkIds);
+    } else {
+      bulkSelection.clearSelection();
+    }
+  });
+
+  // Bulk toolbar action buttons
+  document.getElementById('bulkEnableBtn')?.addEventListener('click', () => {
+    bulkActions.bulkEnable();
+  });
+
+  document.getElementById('bulkDisableBtn')?.addEventListener('click', () => {
+    bulkActions.bulkDisable();
+  });
+
+  document.getElementById('bulkDeleteBtn')?.addEventListener('click', () => {
+    bulkActions.bulkDelete();
+  });
+
+  document.getElementById('bulkClearBtn')?.addEventListener('click', () => {
+    bulkSelection.clearSelection();
+  });
+
+  // ═══════════ ENHANCED CONFIRMATION MODAL ═══════════
+  function showConfirmModal(title, message) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('confirmModal');
+      const titleEl = document.getElementById('confirmTitle');
+      const messageEl = document.getElementById('confirmMessage');
+      const confirmBtn = document.getElementById('confirmActionBtn');
+      const cancelBtn = document.getElementById('confirmCancelBtn');
+      const closeBtn = document.getElementById('confirmModalClose');
+
+      titleEl.textContent = title;
+      messageEl.textContent = message;
+      
+      // Add entrance animation
+      modal.classList.add('active');
+      modal.querySelector('.modal-content').style.animation = 'modalSlideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+
+      const cleanup = () => {
+        // Add exit animation
+        const content = modal.querySelector('.modal-content');
+        content.style.animation = 'modalSlideOut 0.3s ease-out';
+        setTimeout(() => {
+          modal.classList.remove('active');
+          content.style.animation = '';
+        }, 300);
+        
+        confirmBtn.removeEventListener('click', handleConfirm);
+        cancelBtn.removeEventListener('click', handleCancel);
+        closeBtn.removeEventListener('click', handleCancel);
+        modal.removeEventListener('click', handleBackdropClick);
+        document.removeEventListener('keydown', handleKeyPress);
+      };
+
+      const handleConfirm = () => {
+        cleanup();
+        resolve(true);
+      };
+
+      const handleCancel = () => {
+        cleanup();
+        resolve(false);
+      };
+
+      const handleBackdropClick = (e) => {
+        if (e.target === modal) {
+          handleCancel();
+        }
+      };
+
+      const handleKeyPress = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleConfirm();
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          handleCancel();
+        }
+      };
+
+      confirmBtn.addEventListener('click', handleConfirm);
+      cancelBtn.addEventListener('click', handleCancel);
+      closeBtn.addEventListener('click', handleCancel);
+      modal.addEventListener('click', handleBackdropClick);
+      document.addEventListener('keydown', handleKeyPress);
+
+      // Focus confirm button for keyboard accessibility
+      setTimeout(() => confirmBtn.focus(), 100);
+    });
   }
 
   // ─── Modal ───
@@ -606,6 +1015,7 @@
     loadLinks();
     loadProfile();
     initPublicUrl();
+    setupKeyboardShortcuts();
   });
 
   // ─── Public URL Bar ───

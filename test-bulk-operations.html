@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Bulk Operations</title>
+</head>
+<body>
+  <h1>Bulk Operations Test</h1>
+  <button onclick="testBulkUpdate()">Test Bulk Update</button>
+  <button onclick="testBulkDelete()">Test Bulk Delete</button>
+  <pre id="output"></pre>
+
+  <script>
+    const output = document.getElementById('output');
+
+    async function testBulkUpdate() {
+      try {
+        const response = await fetch('http://localhost:3000/api/links/bulk-update', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            linkIds: ['test-id-1', 'test-id-2'], 
+            active: true 
+          })
+        });
+        const data = await response.json();
+        output.textContent = 'Bulk Update Response:\n' + JSON.stringify(data, null, 2);
+      } catch (err) {
+        output.textContent = 'Error: ' + err.message;
+      }
+    }
+
+    async function testBulkDelete() {
+      try {
+        const response = await fetch('http://localhost:3000/api/links/bulk-delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            linkIds: ['test-id-1', 'test-id-2']
+          })
+        });
+        const data = await response.json();
+        output.textContent = 'Bulk Delete Response:\n' + JSON.stringify(data, null, 2);
+      } catch (err) {
+        output.textContent = 'Error: ' + err.message;
+      }
+    }
+  </script>
+</body>
+</html>
