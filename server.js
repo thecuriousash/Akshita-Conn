@@ -1470,58 +1470,6 @@ app.get('/api/u/:username/settings', async (req, res) => {
   });
 });
 
-// Get comments for a profile
-app.get('/api/u/:username/comments', async (req, res) => {
-    try {
-        const { username } = req.params;
-
-        const { data, error } = await supabase
-            .from('comments')
-            .select('*')
-            .eq('username', username)
-            .order('created_at', { ascending: false });
-
-        if (error) throw error;
-
-        res.json(data);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to fetch comments' });
-    }
-});
-
-// Add comment
-app.post('/api/u/:username/comments', async (req, res) => {
-    try {
-        const { username } = req.params;
-        const { visitor_name, content } = req.body;
-
-        if (!visitor_name || !content) {
-            return res.status(400).json({
-                error: 'All fields required'
-            });
-        }
-
-        const { data, error } = await supabase
-            .from('comments')
-            .insert([
-                {
-                    username,
-                    visitor_name,
-                    content
-                }
-            ])
-            .select();
-
-        if (error) throw error;
-
-        res.json(data[0]);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Failed to add comment' });
-    }
-});
-
 // Track clicks on public profile
 app.post('/api/u/:username/links/:id/click', async (req, res) => {
   const { data: user } = await supabase
