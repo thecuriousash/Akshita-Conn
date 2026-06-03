@@ -169,6 +169,16 @@ function isContactRateLimited(ip) {
   return false;
 }
 
+// ─── Input Sanitization Helper ───
+function sanitizeText(str) {
+  if (typeof str !== 'string') return '';
+  return str
+    .replace(/<[^>]*>/g, '')     // strip HTML tags
+    .replace(/[<>]/g, '')        // strip any remaining < or > (broken tags)
+    .replace(/\s{2,}/g, ' ')     // collapse multiple spaces
+    .trim();
+}
+
 // ─── Init default data for new user ───
 
 async function initUserData(userId, userName) {
@@ -1560,12 +1570,21 @@ app.post('/api/contact', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required.' });
   }
 
-  if (name.length > 100 || email.length > 200 || message.length > 5000) {
+  // Sanitize inputs (strip HTML, collapse whitespace)
+  const sanitizedName = sanitizeText(name);
+  const sanitizedEmail = sanitizeText(email);
+  const sanitizedMessage = sanitizeText(message);
+
+  if (!sanitizedName || !sanitizedEmail || !sanitizedMessage) {
+    return res.status(400).json({ error: 'All fields are required.' });
+  }
+
+  if (sanitizedName.length > 100 || sanitizedEmail.length > 200 || sanitizedMessage.length > 5000) {
     return res.status(400).json({ error: 'Input too long.' });
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
+  if (!emailRegex.test(sanitizedEmail)) {
     return res.status(400).json({ error: 'Invalid email address.' });
   }
 
@@ -1576,9 +1595,9 @@ app.post('/api/contact', async (req, res) => {
 
   const { error } = await supabase.from('contacts').insert({
     id: uuidv4(),
-    name: name.trim(),
-    email: email.trim().toLowerCase(),
-    message: message.trim(),
+    name: sanitizedName,
+    email: sanitizedEmail.toLowerCase(),
+    message: sanitizedMessage,
     ip: clientIP
   });
 
