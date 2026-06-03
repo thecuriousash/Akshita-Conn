@@ -14,14 +14,14 @@
   <meta name="robots" content="index, follow">
 
   <!-- Canonical URL -->
-  <link rel="canonical" href="https://conn-delta.vercel.app/" />
+  <link rel="canonical" href="https://conn-delta.vercel.app/" id="canonicalTag" />
 
   <!-- Performance Hints -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="dns-prefetch" href="https://fonts.gstatic.com">
 
   <!-- JSON-LD Structured Data -->
-  <script type="application/ld+json">
+  <script type="application/ld+json" id="jsonldSchema">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
@@ -56,24 +56,24 @@
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://conn-delta.vercel.app/">
+  <meta property="og:url" content="https://conn-delta.vercel.app/" id="ogUrl">
   <meta property="og:title" content="Conn — All Links at One Place | Best Link in Bio Tool">
   <meta property="og:description"
     content="Conn is the ultimate link-in-bio tool. Create a stunning portfolio page with gorgeous themes, powerful analytics, and full customization. All your links in one place.">
-  <meta property="og:image" content="https://conn-delta.vercel.app/assets/og-home.jpg">
+  <meta property="og:image" content="https://conn-delta.vercel.app/assets/og-home.jpg" id="ogImage">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="Conn">
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:url" content="https://conn-delta.vercel.app/">
+  <meta name="twitter:url" content="https://conn-delta.vercel.app/" id="twUrl">
   <meta name="twitter:title" content="Conn — All Links at One Place | Best Link in Bio Tool">
   <meta name="twitter:site" content="@connapp">
   <meta name="twitter:creator" content="@connapp">
   <meta name="twitter:description"
     content="Conn is the ultimate link-in-bio tool. Create a stunning portfolio page with gorgeous themes, powerful analytics, and full customization. All your links in one place.">
-  <meta name="twitter:image" content="https://conn-delta.vercel.app/assets/og-home.jpg">
+  <meta name="twitter:image" content="https://conn-delta.vercel.app/assets/og-home.jpg" id="twImage">
 
   <link rel="icon"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
@@ -85,6 +85,30 @@
   <script defer src="/_vercel/insights/script.js"></script>
   <script>(function(){if(localStorage.getItem("conn-color-mode")==="light"){document.documentElement.classList.add("light-mode");}}());</script>
     <link rel="stylesheet" href="css/light-mode.css">
+  <script>
+    (function() {
+      var origin = window.location.origin;
+      var canonical = document.getElementById('canonicalTag');
+      var ogUrl = document.getElementById('ogUrl');
+      var ogImage = document.getElementById('ogImage');
+      var twUrl = document.getElementById('twUrl');
+      var twImage = document.getElementById('twImage');
+      var jsonld = document.getElementById('jsonldSchema');
+      if (canonical) canonical.href = origin + '/';
+      if (ogUrl) ogUrl.content = origin + '/';
+      if (ogImage) ogImage.content = origin + '/assets/og-home.jpg';
+      if (twUrl) twUrl.content = origin + '/';
+      if (twImage) twImage.content = origin + '/assets/og-home.jpg';
+      if (jsonld) {
+        try {
+          var data = JSON.parse(jsonld.textContent);
+          data.url = origin + '/';
+          if (data.creator && data.creator.url) data.creator.url = origin + '/';
+          jsonld.textContent = JSON.stringify(data);
+        } catch(e) {}
+      }
+    })();
+  </script>
 </head>
 
 <body>
