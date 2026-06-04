@@ -701,3 +701,12 @@ input, textarea, select {
   max-height: 0;
   opacity: 0;
 }
+::selection {
+  background: #a855f7;
+  color: #ffffff;
+}
+
+::-moz-selection {
+  background: #a855f7;
+  color: #ffffff;
+}
