@@ -10,6 +10,11 @@
   const pathParts = window.location.pathname.split('/').filter(Boolean);
   const isPublicProfile = pathParts[0] === 'u' && pathParts[1];
   const profileUsername = isPublicProfile ? pathParts[1] : null;
+  const urlParams = new URLSearchParams(window.location.search);
+  const previewTheme = urlParams.get('previewTheme');
+  if (previewTheme) {
+    document.body.className = `theme-${previewTheme}`;
+  }
 
   function apiUrl(endpoint) {
     if (isPublicProfile) {
@@ -68,7 +73,9 @@
 
       // Apply theme
       const theme = settings.selectedTheme || 'midnight';
-      document.body.className = `theme-${theme}`;
+      if (!previewTheme) {
+        document.body.className = `theme-${theme}`;
+      }
       currentThemeColor = THEME_COLORS[theme] || '168, 85, 247';
 
       // Update page title
