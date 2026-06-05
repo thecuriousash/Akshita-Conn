@@ -701,3 +701,14 @@ input, textarea, select {
   max-height: 0;
   opacity: 0;
 }
+
+#scroll-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0%;
+  height: 4px;
+  background: #a855f7;
+  z-index: 9999;
+  transition: width 0.1s ease;
+}

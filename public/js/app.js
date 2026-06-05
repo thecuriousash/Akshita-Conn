@@ -373,6 +373,26 @@
     return div.innerHTML;
   }
 
+  // --- Scroll Progress Indicator ---
+  window.addEventListener("scroll", () => {
+  const scrollTop = document.documentElement.scrollTop;
+
+  const scrollHeight =
+    document.documentElement.scrollHeight -
+    document.documentElement.clientHeight;
+
+  const scrollPercent =
+    (scrollTop / scrollHeight) * 100;
+
+  const progressBar =
+    document.getElementById("scroll-progress");
+
+  if (progressBar) {
+    progressBar.style.width = scrollPercent + "%";
+  }
+  });
+  // --- End Scroll Progress Indicator ---
+
   // ─── Init ───
   document.addEventListener('DOMContentLoaded', async () => {
     await loadSettings();
