@@ -261,10 +261,11 @@
       if (profile.socials) {
         Object.entries(profile.socials).forEach(([platform, url]) => {
           if (!url || !SOCIAL_ICONS[platform]) return;
-          const finalUrl = platform === 'email' ? `mailto:${url}` : url;
+          const isUrl = url.startsWith('http://') || url.startsWith('https://');
+          const finalUrl = platform === 'email' ? (isUrl ? url : `mailto:${url}`) : url;
           const btn = document.createElement('a');
           btn.href = finalUrl;
-          btn.target = platform !== 'email' ? '_blank' : '';
+          btn.target = (platform !== 'email' || isUrl) ? '_blank' : '';
           btn.rel = 'noopener noreferrer';
           btn.className = 'social-icon-btn';
           btn.title = platform.charAt(0).toUpperCase() + platform.slice(1);

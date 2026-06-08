@@ -256,7 +256,7 @@ async function processScheduledLinks() {
           .from('user_links')
           .update({ active: shouldBeActive })
           .eq('id', link.id);
-        
+
         console.log(`Link "${link.title}" (${link.id}) ${shouldBeActive ? 'activated' : 'deactivated'} by schedule`);
       }
     }
@@ -418,11 +418,11 @@ app.post('/api/auth/register', registerLimiter, async (req, res) => {
     const token = generateToken({ id: newUserId, name, username: finalUsername });
     setAuthCookie(res, token);
 
-    return res.status(201).json({ 
-  message: "Registration successful", 
-  name, 
-  username: finalUsername 
-});
+    return res.status(201).json({
+      message: "Registration successful",
+      name,
+      username: finalUsername
+    });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Server error. Please try again.' });
@@ -633,11 +633,61 @@ app.put('/api/profile', requireAuth, async (req, res) => {
     .eq('user_id', req.auth.userId)
     .maybeSingle();
 
+  const socials = req.body.socials ?? existing?.socials ?? {};
+
+  // Validate socials if provided
+  if (socials && typeof socials === 'object') {
+    // Auto-prefix http/https for platform links if not empty
+    const platforms = ['twitter', 'instagram', 'github', 'linkedin', 'youtube', 'tiktok'];
+    platforms.forEach(p => {
+      if (socials[p] && typeof socials[p] === 'string') {
+        socials[p] = socials[p].trim();
+        if (socials[p] && !/^https?:\/\//i.test(socials[p])) {
+          socials[p] = 'https://' + socials[p];
+        }
+      }
+    });
+
+    // Auto-prefix http/https for email if it doesn't look like an email and isn't empty
+    if (socials.email && typeof socials.email === 'string') {
+      socials.email = socials.email.trim();
+      if (socials.email && !socials.email.includes('@') && !/^https?:\/\//i.test(socials.email)) {
+        socials.email = 'https://' + socials.email;
+      }
+    }
+
+    // Validation patterns
+    const patterns = {
+      twitter: /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/.+/i,
+      instagram: /^https?:\/\/(www\.)?instagram\.com\/.+/i,
+      github: /^https?:\/\/(www\.)?github\.com\/.+/i,
+      linkedin: /^https?:\/\/(www\.)?linkedin\.com\/.+/i,
+      youtube: /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/.+/i,
+      tiktok: /^https?:\/\/(www\.)?tiktok\.com\/.+/i
+    };
+
+    for (const [key, regex] of Object.entries(patterns)) {
+      if (socials[key]) {
+        if (!regex.test(socials[key])) {
+          return res.status(400).json({ error: `Invalid URL for ${key}` });
+        }
+      }
+    }
+
+    if (socials.email) {
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(socials.email);
+      const isUrl = /^https?:\/\/.+/i.test(socials.email);
+      if (!isEmail && !isUrl) {
+        return res.status(400).json({ error: 'Email must be a valid email address or a valid URL' });
+      }
+    }
+  }
+
   const updates = {
     name: req.body.name ?? existing?.name ?? 'Your Name',
     bio: req.body.bio ?? existing?.bio ?? '',
     avatar: req.body.avatar ?? existing?.avatar ?? '',
-    socials: req.body.socials ?? existing?.socials ?? {}
+    socials
   };
 
   if (existing) {
@@ -734,7 +784,7 @@ app.put('/api/categories/:id', requireAuth, async (req, res) => {
   try {
     const categoryId = req.params.id;
     const updates = {};
-    
+
     if (req.body?.name !== undefined) updates.name = req.body.name?.toString().trim() || '';
     if (req.body?.icon !== undefined) updates.icon = req.body.icon?.toString().trim();
     if (req.body?.color !== undefined) updates.color = req.body.color?.toString().trim();
@@ -855,7 +905,7 @@ app.put('/api/categories/reorder', requireAuth, async (req, res) => {
 app.get('/api/links', requireAuth, async (req, res) => {
   // Check if this is for admin panel (needs flat array) or public view (needs grouped)
   const grouped = req.query.grouped === 'true';
-  
+
   // Fetch categories
   const { data: categories } = await supabase
     .from('link_categories')
@@ -875,11 +925,11 @@ app.get('/api/links', requireAuth, async (req, res) => {
   // Map links with schedule status
   const mappedLinks = (links || []).map(l => {
     let scheduleStatus = 'none';
-    
+
     if (l.is_scheduled) {
       const startDate = l.scheduled_start ? new Date(l.scheduled_start) : null;
       const endDate = l.scheduled_end ? new Date(l.scheduled_end) : null;
-      
+
       if (startDate && now < startDate) {
         scheduleStatus = 'pending';
       } else if (endDate && now > endDate) {
@@ -1030,7 +1080,7 @@ app.post('/api/links', requireAuth, async (req, res) => {
 // Bulk update links (enable/disable multiple links)
 app.put('/api/links/bulk-update', requireAuth, async (req, res) => {
   const { linkIds, active } = req.body;
-  
+
   if (!linkIds || !Array.isArray(linkIds) || linkIds.length === 0) {
     return res.status(400).json({ error: 'linkIds array required' });
   }
@@ -1049,10 +1099,10 @@ app.put('/api/links/bulk-update', requireAuth, async (req, res) => {
 
     if (error) throw error;
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       updated: linkIds.length,
-      active 
+      active
     });
   } catch (err) {
     console.error('Bulk update error:', err);
@@ -1063,7 +1113,7 @@ app.put('/api/links/bulk-update', requireAuth, async (req, res) => {
 // Bulk delete links
 app.delete('/api/links/bulk-delete', requireAuth, async (req, res) => {
   const { linkIds } = req.body;
-  
+
   if (!linkIds || !Array.isArray(linkIds) || linkIds.length === 0) {
     return res.status(400).json({ error: 'linkIds array required' });
   }
@@ -1100,8 +1150,8 @@ app.delete('/api/links/bulk-delete', requireAuth, async (req, res) => {
       }
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       deleted: linkIds.length,
       undoData: linksToDelete
     });
@@ -1382,14 +1432,14 @@ app.get('/api/u/:username/links', async (req, res) => {
   const now = new Date();
   const activeLinks = (links || []).filter(l => {
     if (!l.is_scheduled) return true;
-    
+
     const startDate = l.scheduled_start ? new Date(l.scheduled_start) : null;
     const endDate = l.scheduled_end ? new Date(l.scheduled_end) : null;
-    
+
     // Check if link is within its scheduled time window
     if (startDate && now < startDate) return false; // Not started yet
     if (endDate && now > endDate) return false; // Already expired
-    
+
     return true;
   });
 

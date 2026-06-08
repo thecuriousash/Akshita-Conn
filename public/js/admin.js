@@ -998,19 +998,66 @@
   }
 
   document.getElementById('saveProfileBtn').addEventListener('click', async () => {
+    const socials = {
+      twitter: document.getElementById('socialTwitter').value.trim(),
+      instagram: document.getElementById('socialInstagram').value.trim(),
+      github: document.getElementById('socialGithub').value.trim(),
+      linkedin: document.getElementById('socialLinkedin').value.trim(),
+      youtube: document.getElementById('socialYoutube').value.trim(),
+      tiktok: document.getElementById('socialTiktok').value.trim(),
+      email: document.getElementById('socialEmail').value.trim()
+    };
+
+    // Auto-prefix http/https for platform links if not empty
+    const platforms = ['twitter', 'instagram', 'github', 'linkedin', 'youtube', 'tiktok'];
+    platforms.forEach(p => {
+      if (socials[p] && !/^https?:\/\//i.test(socials[p])) {
+        socials[p] = 'https://' + socials[p];
+      }
+    });
+
+    // Auto-prefix http/https for email if it doesn't look like an email and isn't empty
+    if (socials.email && !socials.email.includes('@') && !/^https?:\/\//i.test(socials.email)) {
+      socials.email = 'https://' + socials.email;
+    }
+
+    // Validation patterns
+    const validationErrors = [];
+    const patterns = {
+      twitter: { name: 'Twitter / X', regex: /^https?:\/\/(www\.)?(twitter\.com|x\.com)\/.+/i },
+      instagram: { name: 'Instagram', regex: /^https?:\/\/(www\.)?instagram\.com\/.+/i },
+      github: { name: 'GitHub', regex: /^https?:\/\/(www\.)?github\.com\/.+/i },
+      linkedin: { name: 'LinkedIn', regex: /^https?:\/\/(www\.)?linkedin\.com\/.+/i },
+      youtube: { name: 'YouTube', regex: /^https?:\/\/(www\.)?(youtube\.com|youtu\.be)\/.+/i },
+      tiktok: { name: 'TikTok', regex: /^https?:\/\/(www\.)?tiktok\.com\/.+/i }
+    };
+
+    for (const [key, platform] of Object.entries(patterns)) {
+      if (socials[key]) {
+        if (!platform.regex.test(socials[key])) {
+          validationErrors.push(`${platform.name} URL is invalid. It must be a valid link.`);
+        }
+      }
+    }
+
+    if (socials.email) {
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(socials.email);
+      const isUrl = /^https?:\/\/.+/i.test(socials.email);
+      if (!isEmail && !isUrl) {
+        validationErrors.push('Email must be a valid email address or a valid URL.');
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      showToast(validationErrors[0], 'error');
+      return;
+    }
+
     const data = {
       name: document.getElementById('inputName').value.trim(),
       bio: document.getElementById('inputBio').value.trim(),
       avatar: document.getElementById('inputAvatar').value.trim(),
-      socials: {
-        twitter: document.getElementById('socialTwitter').value.trim(),
-        instagram: document.getElementById('socialInstagram').value.trim(),
-        github: document.getElementById('socialGithub').value.trim(),
-        linkedin: document.getElementById('socialLinkedin').value.trim(),
-        youtube: document.getElementById('socialYoutube').value.trim(),
-        tiktok: document.getElementById('socialTiktok').value.trim(),
-        email: document.getElementById('socialEmail').value.trim()
-      }
+      socials
     };
     try {
       await fetch('/api/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
