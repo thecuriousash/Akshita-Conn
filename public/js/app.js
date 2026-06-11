@@ -214,7 +214,7 @@
       if (isPublicProfile) {
         const displayName = profile.name || profileUsername;
         const bio = profile.bio || `All links for ${displayName} in one place.`;
-        const pageUrl = `https://conn-delta.vercel.app/u/${profileUsername}`;
+        const pageUrl = `${window.location.origin}/u/${profileUsername}`;
 
         // Title + description
         document.title = `${displayName} — Conn | All Links`;

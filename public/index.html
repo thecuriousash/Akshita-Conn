@@ -36,6 +36,19 @@
   </script>
   <script defer src="/_vercel/insights/script.js"></script>
   <link rel="stylesheet" href="css/light-mode.css">
+  <script>
+    (function() {
+      var origin = window.location.origin;
+      var canonical = document.getElementById('canonicalTag');
+      var ogUrl = document.getElementById('ogUrl');
+      var ogImage = document.getElementById('ogImage');
+      var twImage = document.getElementById('twImage');
+      if (canonical) canonical.href = origin + '/';
+      if (ogUrl) ogUrl.content = origin + '/';
+      if (ogImage) ogImage.content = origin + '/assets/og-home.jpg';
+      if (twImage) twImage.content = origin + '/assets/og-home.jpg';
+    })();
+  </script>
 </head>
 <body class="theme-midnight">
   
