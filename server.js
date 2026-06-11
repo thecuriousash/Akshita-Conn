@@ -843,38 +843,11 @@ app.delete('/api/categories/:id', requireAuth, async (req, res) => {
 
     if (!existing) return res.status(404).json({ error: 'Category not found' });
 
-    // Uncategorize links
-    await supabase
-      .from('user_links')
-      .update({ category_id: null })
-      .eq('user_id', req.auth.userId)
-      .eq('category_id', categoryId);
-
-    // Delete category
-    const { error } = await supabase
-      .from('link_categories')
-      .delete()
-      .eq('id', categoryId)
-      .eq('user_id', req.auth.userId);
-
-    if (error) throw error;
-
-    // Reorder remaining
-    const { data: remaining } = await supabase
-      .from('link_categories')
-      .select('id')
-      .eq('user_id', req.auth.userId)
-      .order('category_order', { ascending: true });
-
-    if (remaining && remaining.length) {
-      for (let i = 0; i < remaining.length; i++) {
-        await supabase
-          .from('link_categories')
-          .update({ category_order: i })
-          .eq('id', remaining[i].id)
-          .eq('user_id', req.auth.userId);
-      }
-    }
+    // Atomically delete category + uncategorize links + reorder remaining categories
+    await supabase.rpc('delete_category_and_reorder', {
+      p_category_id: categoryId,
+      p_user_id: req.auth.userId
+    });
 
     res.json({ success: true });
   } catch (err) {
@@ -888,13 +861,13 @@ app.put('/api/categories/reorder', requireAuth, async (req, res) => {
     const { orderedCategoryIds } = req.body;
     if (!Array.isArray(orderedCategoryIds)) return res.status(400).json({ error: 'orderedCategoryIds required' });
 
-    for (let i = 0; i < orderedCategoryIds.length; i++) {
-      await supabase
-        .from('link_categories')
-        .update({ category_order: i })
-        .eq('id', orderedCategoryIds[i])
-        .eq('user_id', req.auth.userId);
-    }
+    // Atomically reorder all categories
+    const { error: rpcError } = await supabase.rpc('reorder_categories_by_ids', {
+      p_ordered_ids: orderedCategoryIds,
+      p_user_id: req.auth.userId
+    });
+
+    if (rpcError) throw rpcError;
 
     const { data: categories, error } = await supabase
       .from('link_categories')
@@ -1136,29 +1109,13 @@ app.delete('/api/links/bulk-delete', requireAuth, async (req, res) => {
       .in('id', linkIds)
       .eq('user_id', req.auth.userId);
 
-    // Delete the links
-    const { error } = await supabase
-      .from('user_links')
-      .delete()
-      .in('id', linkIds)
-      .eq('user_id', req.auth.userId);
+    // Atomically delete links + reorder remaining
+    const { error: rpcError } = await supabase.rpc('delete_links_bulk_and_reorder', {
+      p_link_ids: linkIds,
+      p_user_id: req.auth.userId
+    });
 
-    if (error) throw error;
-
-    // Reorder remaining links
-    const { data: remainingLinks } = await supabase
-      .from('user_links')
-      .select('id')
-      .eq('user_id', req.auth.userId)
-      .order('display_order', { ascending: true });
-
-    if (remainingLinks) {
-      for (let i = 0; i < remainingLinks.length; i++) {
-        await supabase.from('user_links')
-          .update({ display_order: i })
-          .eq('id', remainingLinks[i].id);
-      }
-    }
+    if (rpcError) throw rpcError;
 
     res.json({
       success: true,
@@ -1223,63 +1180,61 @@ app.put('/api/links/:id', requireAuth, async (req, res) => {
 });
 
 app.delete('/api/links/:id', requireAuth, async (req, res) => {
-  const { data: existing } = await supabase
-    .from('user_links')
-    .select('id')
-    .eq('id', req.params.id)
-    .eq('user_id', req.auth.userId)
-    .maybeSingle();
+  try {
+    const { data: existing } = await supabase
+      .from('user_links')
+      .select('id')
+      .eq('id', req.params.id)
+      .eq('user_id', req.auth.userId)
+      .maybeSingle();
 
-  if (!existing) return res.status(404).json({ error: 'Link not found' });
+    if (!existing) return res.status(404).json({ error: 'Link not found' });
 
-  await supabase.from('user_links')
-    .delete()
-    .eq('id', req.params.id)
-    .eq('user_id', req.auth.userId);
+    // Atomically delete link + reorder remaining
+    const { error: rpcError } = await supabase.rpc('delete_link_and_reorder', {
+      p_link_id: req.params.id,
+      p_user_id: req.auth.userId
+    });
 
-  // Reorder remaining links
-  const { data: remainingLinks } = await supabase
-    .from('user_links')
-    .select('id')
-    .eq('user_id', req.auth.userId)
-    .order('display_order', { ascending: true });
+    if (rpcError) throw rpcError;
 
-  if (remainingLinks) {
-    for (let i = 0; i < remainingLinks.length; i++) {
-      await supabase.from('user_links')
-        .update({ display_order: i })
-        .eq('id', remainingLinks[i].id);
-    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /api/links/:id error:', err);
+    res.status(500).json({ error: 'Failed to delete link' });
   }
-
-  res.json({ success: true });
 });
 
 // Reorder links
 app.put('/api/links-reorder', requireAuth, async (req, res) => {
-  const { orderedIds } = req.body;
-  if (!orderedIds) return res.status(400).json({ error: 'orderedIds required' });
+  try {
+    const { orderedIds } = req.body;
+    if (!orderedIds) return res.status(400).json({ error: 'orderedIds required' });
 
-  // Update each link's order
-  for (let i = 0; i < orderedIds.length; i++) {
-    await supabase.from('user_links')
-      .update({ display_order: i })
-      .eq('id', orderedIds[i])
-      .eq('user_id', req.auth.userId);
+    // Atomically reorder all links
+    const { error: rpcError } = await supabase.rpc('reorder_links_by_ids', {
+      p_ordered_ids: orderedIds,
+      p_user_id: req.auth.userId
+    });
+
+    if (rpcError) throw rpcError;
+
+    const { data: links } = await supabase
+      .from('user_links')
+      .select('*')
+      .eq('user_id', req.auth.userId)
+      .order('display_order', { ascending: true });
+
+    const mapped = (links || []).map(l => ({
+      id: l.id, title: l.title, url: l.url, icon: l.icon,
+      clicks: l.clicks, active: l.active, order: l.display_order, style: l.style
+    }));
+
+    res.json(mapped);
+  } catch (err) {
+    console.error('PUT /api/links-reorder error:', err);
+    res.status(500).json({ error: 'Failed to reorder links' });
   }
-
-  const { data: links } = await supabase
-    .from('user_links')
-    .select('*')
-    .eq('user_id', req.auth.userId)
-    .order('display_order', { ascending: true });
-
-  const mapped = (links || []).map(l => ({
-    id: l.id, title: l.title, url: l.url, icon: l.icon,
-    clicks: l.clicks, active: l.active, order: l.display_order, style: l.style
-  }));
-
-  res.json(mapped);
 });
 
 // Track clicks (public — find link by ID across all users)
